@@ -64,16 +64,18 @@ Do not delete `data` to restart the app. Tests use temporary isolated databases,
 
 ## Optional live AI setup
 
-The implemented adapter uses an Ollama-compatible `/api/chat` API with a vision-capable model and structured JSON output. No model is downloaded and no paid provider is purchased by this project.
+The implemented adapter uses an Ollama-compatible `/api/chat` API with a vision-capable model and structured JSON output. The recommended self-hosted configuration is `qwen3-vl:4b-instruct`. No paid provider or API subscription is required for that configuration. Model files and server computing resources are still required. See `docs/LOCAL_AI.md` for setup, verification and client-server deployment boundaries.
 
 1. Supply a reachable Ollama-compatible service and an installed vision-capable model.
 2. Copy `.env.example` to `.env` and set `AI_PROVIDER=ollama`, `AI_MODEL` to that model, and `AI_BASE_URL` to the service base URL.
 3. Set server-only `AI_API_KEY` only if that service requires bearer authentication. Never put provider secrets in `src`, a VITE_ variable, Git, screenshots or chat.
 4. Restart the API and use Scan document. Verify the returned draft against the image before confirming it.
 
-If Ollama runs outside the development container, localhost inside the container is not the host. Use a service address reachable from that container. Processing failures preserve drafts and show a real error; there is no successful-extraction simulator. Provider requests time out after 45 seconds and scans are limited per user in the local process.
+If Ollama runs outside the development container, localhost inside the container is not the host. Use a service address reachable from that container. Ollama failures preserve drafts and show an error. Ollama requests default to a 180-second timeout; `AI_TIMEOUT_MS` accepts 1000-600000 milliseconds for cold starts. The local development configuration allows 300 seconds. Scans are limited per user in the local process.
 
-Live model availability and extraction accuracy have not been verified without a configured provider. The adapter protocol is tested with an explicitly labelled local HTTP test fixture; that is not a live-AI accuracy test. The provider can be wrong even when it returns valid JSON, so human verification is mandatory.
+Set `AI_LOCAL_ONLY=1` to reject non-Ollama extraction providers, including explicit free-OCR overrides. There is no external provider fallback in that mode; unavailable AI means manual review. This flag does not validate the network address of your Ollama service: configure a trusted loopback or private backend service address, never an untrusted hosted endpoint.
+
+Run `npx tsx scripts/verify-local-ai.ts` for an opt-in real-model check using generated receipt/unpaid-invoice images and an isolated in-memory database. It verifies extracted payment fields, reads back the exact saved drafts, and asserts that no payments or stock are posted automatically. Evidence is written to `artifacts/local-ai/verification.json`. The normal automated adapter tests use an explicitly labelled HTTP protocol fixture; that is not a live-model accuracy test. Even a passing live smoke check does not establish accuracy for all documents, so human verification is mandatory.
 
 ## Checks
 

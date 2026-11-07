@@ -13,7 +13,7 @@ test('document UI: honest setup-required, original preview, manual draft exclusi
  try {
   await page.request.post(base+'/api/register',{headers:{'x-ledger-request':'1'},data:{name:'Document Reviewer',email:'documents@example.com',password:'DocumentReview42!'}});await page.goto(base);
   await page.getByRole('button',{name:'Add expense',exact:true}).first().click();await page.getByRole('button',{name:'Upload bill / payment receipt',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Documents',exact:true})).toBeVisible();await expect(page.getByText('Free Invoice AI Active',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Documents',exact:true})).toBeVisible();await expect(page.getByText('Free OCR scanning',{exact:true})).toBeVisible();
   const image=await sharp({create:{width:64,height:64,channels:3,background:'#fff'}}).png().toBuffer();
   await page.getByLabel('Screenshot file',{exact:true}).setInputFiles({name:'fictional-bill.png',mimeType:'image/png',buffer:image});await page.getByRole('button',{name:'Upload screenshot',exact:true}).click();await expect(page.getByAltText('Source document')).toBeVisible();
   await expect(page.getByLabel('Document payment method',{exact:true})).toHaveValue('');await page.getByLabel('Document payment date',{exact:true}).fill('2026-11-05');await page.getByLabel('Document description / payee',{exact:true}).fill('Fictional reviewed payment');await page.getByLabel('Document paid amount',{exact:true}).fill('345.67');await page.getByLabel('Document payment method',{exact:true}).selectOption('Card');await page.getByLabel('Document reference',{exact:true}).fill('DOC-ONE');await page.getByRole('button',{name:'Save draft',exact:true}).click();

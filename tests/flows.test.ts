@@ -39,7 +39,7 @@ test('real browser: supplier, order, partial receipt, explicit payment, filtered
   const canonical=(await (await page.request.get(base+'/api/reports?period=monthly&date=2026-11-05&method=UPI')).json());
   await expect(page.getByTestId('report-total')).toHaveText('₹'+canonical.total);await expect(page.getByText('25 matching payments',{exact:true})).toBeVisible();
   const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel',exact:true}).click();const download=await downloadPromise;const stream=await download.createReadStream();assert.ok(stream);const chunks:Buffer[]=[];for await(const chunk of stream)chunks.push(chunk);const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(Buffer.concat(chunks) as any);const sheet=workbook.getWorksheet('Expenses')!;assert.equal(sheet.rowCount,27);assert.equal(sheet.getRow(sheet.rowCount).getCell(3).result,Number(canonical.total));
-  await page.reload();await expect(page.getByRole('heading',{name:'Expenses',exact:true})).toBeVisible();assert.equal((await (await page.request.get(base+'/api/products')).json()).records[0].quantity,'2');
+  await page.getByRole('button',{name:'Expenses',exact:true}).click();await page.reload();await expect(page.getByRole('heading',{name:'Expenses',exact:true})).toBeVisible();assert.equal((await (await page.request.get(base+'/api/products')).json()).records[0].quantity,'2');
   assert.deepEqual(errors,[]);
  } finally {await browser.close();await app.close();await rm(directory,{recursive:true,force:true});if(oldOrigin===undefined)delete process.env.LOCAL_ORIGINS;else process.env.LOCAL_ORIGINS=oldOrigin;}
 });

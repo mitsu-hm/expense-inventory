@@ -16,6 +16,7 @@ interface AiConfig {provider:Provider;model:string;url:string;key:string|undefin
 
 function configuration():AiConfig|null {
  const provider=process.env.AI_PROVIDER as string|undefined;
+ if(process.env.AI_LOCAL_ONLY==='1'&&provider!=='ollama')return null;
  if(!provider||!['gemini','openai','ollama','free'].includes(provider))return null;
  if(provider==='free') return {provider:'free',model:'ocr-space-free',url:'https://api.ocr.space',key:'helloworld'};
  if(!process.env.AI_MODEL)return null;
@@ -135,8 +136,10 @@ async function callOpenAI(config:AiConfig,system:string,userText:string,b64:stri
 }
 
 async function callOllama(config:AiConfig,system:string,userText:string,b64:string):Promise<string> {
- const res=await fetch(config.url+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json',...(config.key?{Authorization:'Bearer '+config.key}:{})},signal:AbortSignal.timeout(45000),body:JSON.stringify({
-  model:config.model,stream:false,format:z.toJSONSchema(extractedSchema),options:{temperature:0},
+ const requestedTimeout=Number(process.env.AI_TIMEOUT_MS);
+ const timeout=Number.isInteger(requestedTimeout)&&requestedTimeout>=1000&&requestedTimeout<=600000?requestedTimeout:180000;
+ const res=await fetch(config.url+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json',...(config.key?{Authorization:'Bearer '+config.key}:{})},signal:AbortSignal.timeout(timeout),body:JSON.stringify({
+  model:config.model,stream:false,think:false,format:z.toJSONSchema(extractedSchema),options:{temperature:0,num_ctx:8192,num_predict:4096},
   messages:[{role:'system',content:system},{role:'user',content:userText,images:[b64]}]
  })});
  if(!res.ok)throw new HttpError(502,'Ollama could not process this image. Your draft is safe; retry or enter the details manually.');
@@ -146,10 +149,11 @@ async function callOllama(config:AiConfig,system:string,userText:string,b64:stri
 
 /* ── Main extraction (called from documents.ts) ── */
 export async function extractImage(content:Buffer,kind:string,mimeType:string,store:Store,userId:string,space:string,forcedProvider?:string){
+ if(process.env.AI_LOCAL_ONLY==='1'&&(process.env.AI_PROVIDER!=='ollama'||forcedProvider==='free'))throw new HttpError(503,'This website is configured for local-only AI. Start its Ollama service or continue with manual review. External scanning is disabled.','AI_LOCAL_ONLY');
  const config=forcedProvider==='free'?{provider:'free' as const,model:'free-ocr',url:'https://api.ocr.space',key:'helloworld'}:configuration();
  if(!config)throw new HttpError(503,'AI scanning requires setup. Uploads and manual review still work. Configure a vision-capable provider on the server.','AI_SETUP_REQUIRED');
  const system=SYSTEM_PROMPT+fewShotSuffix(store,userId,space,kind);
- const userText='Transcribe this '+kind+' screenshot for human verification. Keep unsupported fields null.';
+ const userText='Transcribe this '+kind+' screenshot for human verification. Keep unsupported fields null. Use a short payee or goods/service summary for description, not a footer or disclaimer. Copy references exactly; never correct or substitute characters. Accepted payment methods do not establish the method actually used. An unpaid bill has null paymentDate and null method. Item lines contain only purchased goods or services, never merchant headers, dates, totals, payment metadata or notes. If no purchased items are visible, use an empty lines array.'+(kind==='payment_receipt'?' For this payment receipt, lines must be empty; extract payment details only.':'');
  const b64=content.toString('base64');
  let raw:string;
  switch(config.provider){
