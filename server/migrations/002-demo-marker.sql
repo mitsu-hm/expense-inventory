@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS demo_seeds (user_id TEXT PRIMARY KEY REFERENCES users(id), seeded_at INTEGER NOT NULL);

@@ -1,0 +1,130 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium, expect, type Page } from '@playwright/test';
+import { createRequire } from 'node:module';
+import { buildApp } from '../server/app';
+import { build } from 'vite';
+import type { ExpenseList } from '../shared/types';
+
+const require = createRequire(import.meta.url);
+async function scan(page: Page, name: string) {
+  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  const violations = await page.evaluate(async () => {
+    const axe = (window as unknown as { axe: { run: (context: Document, options: object) => Promise<{ violations: { id: string; nodes: { target: string[]; failureSummary: string }[] }[] }> } }).axe;
+    const result = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } });
+    return result.violations.map(violation => ({ id: violation.id, nodes: violation.nodes.slice(0, 12).map(node => ({ target: node.target, failureSummary: node.failureSummary })) }));
+  });
+  assert.deepEqual(violations, [], `Accessibility scan: ${name}`);
+}
+
+test('production UI and SQLite: register, save, restart, edit, strict reference duplicate, keyboard and accessibility', { timeout: 120000 }, async () => {
+  // Build the real frontend so this test never exercises a stale or absent bundle.
+  await build({ logLevel: 'error' });
+  const directory = await mkdtemp(join(tmpdir(), 'ledger-ui-'));
+  const dbPath = join(directory, 'ledger.sqlite');
+  const originalOrigins = process.env.LOCAL_ORIGINS;
+  let app = await buildApp({ dbPath });
+  await app.listen({ host: '127.0.0.1', port: 0 });
+  const address = app.server.address();
+  assert.ok(address && typeof address !== 'string');
+  const port = address.port;
+  const base = `http://127.0.0.1:${port}`;
+  process.env.LOCAL_ORIGINS = base;
+  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(base);
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await scan(page, 'sign in');
+    await page.getByRole('button', { name: 'Create an account', exact: true }).click();
+    await page.getByLabel('Your name').fill('Production test');
+    await page.getByLabel('Email address').fill('production@example.test');
+    await page.getByLabel('Password', { exact: true }).fill('production-test-123');
+    await page.getByRole('button', { name: 'Create account', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'No expenses yet' })).toBeVisible();
+    await scan(page, 'empty ledger');
+    const add = page.getByRole('button', { name: 'Add expense', exact: true });
+    await add.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Manual entry' }).click();
+    await page.getByLabel('Payment date').fill('2026-11-01');
+    await page.getByLabel('Description', { exact: true }).fill('Production packaging');
+    await page.getByLabel('Amount', { exact: true }).fill('1450.75');
+    await page.getByLabel('Payment method', { exact: true }).selectOption('UPI');
+    await page.getByLabel('Transaction reference', { exact: true }).fill('UI-REF-001');
+    await page.getByLabel('Additional information', { exact: true }).fill('Persisted through the actual SQLite API');
+    await scan(page, 'manual expense dialog');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Resume draft' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('1450.75');
+    await page.getByRole('button', { name: 'Save expense', exact: true }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    const response = await page.request.get(`${base}/api/expenses?space=real`);
+    assert.equal(response.status(), 200);
+    const saved = await response.json() as ExpenseList;
+    assert.equal(saved.count, 1);
+    assert.equal(saved.records[0].amount, '1450.75');
+    assert.equal(saved.records[0].transactionRef, 'UI-REF-001');
+    await app.close();
+    app = await buildApp({ dbPath });
+    await app.listen({ host: '127.0.0.1', port });
+    await page.reload();
+    await expect(page.getByRole('cell', { name: /^Production packaging Version/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Edit Production packaging' }).click();
+    const concurrent = await page.request.put(`${base}/api/expenses/${saved.records[0].id}?space=real`, { headers: { 'x-ledger-request': '1' }, data: { ...saved.records[0], description: 'Concurrent correction', requestKey: '0b469412-97dc-4544-afc7-b99b3952bb05' } });
+    assert.equal(concurrent.status(), 200);
+    await page.getByLabel('Description', { exact: true }).fill('My correction');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByRole('alert')).toContainText('changed in another tab');
+    await expect(page.getByLabel('Description', { exact: true })).toHaveValue('My correction');
+    await page.getByRole('button', { name: 'Load latest saved version (replaces this draft)' }).click();
+    await expect(page.getByLabel('Description', { exact: true })).toHaveValue('Concurrent correction');
+    await page.getByLabel('Description', { exact: true }).fill('Production packaging corrected');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await page.getByRole('button', { name: 'History for Production packaging corrected' }).click();
+    await expect(page.getByText('Concurrent correction', { exact: true })).toHaveCount(2);
+    await scan(page, 'saved audit history');
+    await page.getByRole('button', { name: 'Close history' }).click();
+    await page.getByRole('button', { name: 'Add expense', exact: true }).click();
+    await page.getByRole('button', { name: 'Manual entry' }).click();
+    await page.getByLabel('Description', { exact: true }).fill('A different receipt for the same payment');
+    await page.getByLabel('Amount', { exact: true }).fill('1450.75');
+    await page.getByLabel('Payment method', { exact: true }).selectOption('Card');
+    await page.getByLabel('Transaction reference', { exact: true }).fill('UI-REF-001');
+    await page.getByRole('button', { name: 'Save expense', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Possible duplicate' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save as a separate expense' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Discard draft' }).click();
+    const real = await (await page.request.get(`${base}/api/expenses?space=real`)).json() as ExpenseList;
+    assert.equal(real.count, 1, 'Reference collision never creates another expense');
+    await scan(page, 'populated ledger');
+    await page.screenshot({ path: '/tmp/ledgersprout-real-desktop.png', fullPage: true });
+    for (const width of [320, 390, 540, 541, 768, 800, 801, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `No root overflow at ${width}px`);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await scan(page, 'mobile ledger');
+    await page.getByRole('button', { name: 'Open navigation' }).click();
+    await expect(page.getByLabel('Workspace space')).toBeVisible();
+    await scan(page, 'mobile navigation');
+    await page.getByRole('button', { name: 'Reminders', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Reminders', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to expenses' }).click();
+    await page.screenshot({ path: '/tmp/ledgersprout-real-mobile.png', fullPage: true });
+    assert.deepEqual(errors, []);
+  } finally {
+    await browser.close(); await app.close(); await rm(directory, { recursive: true, force: true });
+    if (originalOrigins === undefined) delete process.env.LOCAL_ORIGINS; else process.env.LOCAL_ORIGINS = originalOrigins;
+  }
+});

@@ -1,0 +1,38 @@
+.documents-page{display:flex;flex-direction:column;gap:20px;min-width:0}
+.documents-page>.page-heading{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.documents-page h1+p{margin-top:10px}
+.document-upload{display:grid;grid-template-columns:minmax(150px,.8fr) minmax(160px,1fr) auto;gap:16px;align-items:end;padding:20px;background:var(--card-bg);border:1px solid var(--line);border-radius:9px}
+.document-upload>p{grid-column:1/-1}
+.document-workspace{display:grid;grid-template-columns:210px minmax(0,1fr);gap:20px;min-width:0}
+.document-inbox{background:var(--card-bg);border:1px solid var(--line);border-radius:9px;padding:14px;align-self:start;max-height:75vh;overflow:auto}
+.document-inbox>h2{font-size:14px;margin:4px 4px 14px}
+.document-empty{display:flex;flex-direction:column;gap:14px;padding:10px 4px;color:var(--muted);font-size:12px}
+.document-list-item{display:flex;align-items:flex-start;gap:9px;padding:12px 8px;width:100%;border:1px solid transparent;background:transparent;border-radius:7px;text-align:left;overflow-wrap:anywhere;color:inherit}
+.document-list-item>span{min-width:0}
+.document-list-item strong{display:block;font-size:12px}
+.document-list-item small{display:block;font-size:10px;margin-top:5px;color:var(--muted)}
+.document-list-item.selected{background:var(--sage);border-color:var(--forest)}
+.document-list-item:hover{background:var(--sage)}
+.document-review{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:20px;align-items:start;min-width:0}
+.source-image{position:sticky;top:22px;background:var(--sage);border:1px solid var(--line);border-radius:9px;padding:14px;min-width:0}
+.source-image>div{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;margin-bottom:12px}
+.source-image a{display:flex;gap:4px;align-items:center;font-size:10px;color:var(--forest)}
+.source-image img{width:100%;height:auto;max-height:62vh;object-fit:contain;display:block;background:var(--card-bg);border-radius:5px}
+.source-image p{margin-top:12px;overflow-wrap:anywhere}
+.review-fields{display:flex;flex-direction:column;gap:18px;background:var(--card-bg);border:1px solid var(--line);border-radius:9px;padding:20px;min-width:0}
+.review-title{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.document-fields{margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:16px;min-width:0}
+.document-line{border:1px solid var(--line);border-radius:7px;background:var(--sage);padding:14px;margin-top:14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.document-line>.review-title,.document-line>label:nth-child(2){grid-column:1/-1}
+.review-warnings{padding:16px;background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.3);border-radius:7px;color:#b45309;font-size:12px}
+[data-theme="dark"] .review-warnings{color:#fde047;border-color:rgba(234,179,8,.4)}
+.review-warnings ul{padding-left:18px;margin-bottom:0}
+.review-warnings li+li{margin-top:7px}
+.review-check{display:flex;flex-direction:row;align-items:flex-start;font-weight:500;font-size:12px;gap:10px}
+.review-check input{width:17px;height:17px;margin:1px 0 0;flex-shrink:0;accent-color:var(--forest)}
+.document-match{display:flex;align-items:center;gap:8px;text-align:left;border:1px solid var(--line);background:var(--card-bg);padding:10px;border-radius:6px;width:100%;margin-top:10px;color:var(--ink)}
+.document-no-selection{background:var(--sage);border:1px dashed var(--line);border-radius:9px;padding:60px 30px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:18px;color:var(--muted);min-width:0}
+.document-no-selection p{font-size:13px;max-width:400px}
+@media(max-width:1250px){.document-review{grid-template-columns:minmax(0,1fr)}.source-image{position:static}.source-image img{max-height:380px}.document-workspace{grid-template-columns:190px minmax(0,1fr)}}
+@media(max-width:800px){.document-upload{grid-template-columns:minmax(0,1fr)}.document-workspace{grid-template-columns:minmax(0,1fr)}.document-inbox{max-height:250px}.document-review{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:540px){.review-fields{padding:15px}.document-line{grid-template-columns:minmax(0,1fr)}.documents-page>.page-heading{align-items:flex-start}.source-image>div{flex-wrap:wrap}}

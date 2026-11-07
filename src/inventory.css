@@ -1,0 +1,125 @@
+/* Stage 2: same forest/sage workspace, with explicit order/receipt semantics. */
+.inventory-workspace,.suppliers-workspace{min-width:0;max-width:1500px}
+.inventory-heading .button-group{flex-wrap:wrap;justify-content:flex-end}
+.inventory-messages{display:grid;gap:12px;margin-bottom:24px}
+.inventory-panel{margin-bottom:30px}
+.inventory-panel .ledger-panel-heading>div,.purchase-heading>div{min-width:0}
+.inventory-panel .ledger-panel-heading p{margin-top:5px}
+.inventory-table{table-layout:auto;min-width:1180px;font-size:12px}
+.inventory-table th,.inventory-table th:first-child,.inventory-table th:last-child,.inventory-table th:nth-child(n){width:auto;font-size:11px;padding:13px 16px;white-space:normal;line-height:1.5}
+.inventory-table th:first-child,.inventory-table td:first-child{padding-left:20px}
+.inventory-table td{font-size:12px;padding:17px 16px;vertical-align:top;line-height:1.7}
+.inventory-table td strong{color:var(--forest)}
+.inventory-table td small{display:block;font-size:11px;color:#626f59;line-height:1.65;margin-top:4px}
+.inventory-table .amount-cell{font-variant-numeric:tabular-nums;white-space:nowrap}
+.product-table th:first-child{min-width:155px}
+.product-table th:nth-child(2){min-width:145px}
+.product-table th:nth-child(3){min-width:135px}
+.product-table th:nth-child(4){min-width:135px}
+.product-table th:nth-child(n+5){min-width:135px}
+.product-table th:nth-child(6){min-width:155px}
+.inventory-table-note{font-size:11px;line-height:1.8;display:block;color:#626f59}
+.inventory-section-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 0 17px}
+.inventory-section-heading h2{font-size:18px}
+.inventory-section-heading p{margin-top:6px;font-size:12px}
+.inventory-section-heading .pill{font-size:11px;padding:4px 9px}
+.purchase-list{display:grid;gap:22px}
+.purchase-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:22px 20px}
+.purchase-heading .eyebrow{font-size:10px;letter-spacing:1.2px;overflow-wrap:anywhere}
+.purchase-heading h3{font-size:18px;margin-top:5px;overflow-wrap:anywhere}
+.purchase-heading p{font-size:11px;margin-top:6px}
+.purchase-status{flex-shrink:0;font-size:11px;border:1px solid #dbe4cf;border-radius:5px;padding:5px 9px;background:#f0f4e8;color:#48623d}
+.purchase-status-ordered{background:#faf4e7;border-color:#e7dabd;color:#805f2b}
+.purchase-status-partial{background:#f0f2ed;border-color:#dce2d5;color:#52634a}
+.purchase-status-received{background:#eaf3e5;border-color:#d2e3c7;color:#315f31}
+.purchase-lines{min-width:1060px}
+.purchase-lines th:first-child{min-width:215px}
+.purchase-lines th:nth-child(n+2){min-width:120px}
+.purchase-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;padding:18px 20px;border-top:1px solid var(--line);background:#fdfefb}
+.purchase-footer>.field-hint{flex-basis:100%}
+.purchase-totals{display:flex;gap:30px;flex-wrap:wrap;margin:0}
+.purchase-totals dt{font-size:11px;color:#626f59}
+.purchase-totals dd{font-size:17px;color:var(--forest);font-weight:600;margin:4px 0 0;font-variant-numeric:tabular-nums}
+.inventory-wide-dialog{width:850px}
+.inventory-form{padding:0 26px}
+.inventory-form-intro{font-size:12px;line-height:1.8;color:#626f59;margin:0 0 22px}
+.inventory-form input,.inventory-form select,.inventory-form textarea{font-size:13px}
+.inventory-form label{font-size:12px}
+.inventory-form>.notice{margin-top:18px}
+.inventory-form .form-fields{gap:18px}
+.inventory-form .dialog-footer{margin-top:24px}
+.inventory-form .dialog-footer .button{font-size:12px}
+.order-draft-lines{display:grid;gap:16px;min-width:0}
+.order-draft-line{min-width:0;border:1px solid var(--line);padding:16px;border-radius:8px;margin:0;display:grid;gap:16px;background:#fbfcf8}
+.order-draft-line legend{font-size:11px;font-weight:600;color:var(--forest);padding:0 7px}
+.order-numeric-fields{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:14px}
+.inventory-add-line{justify-self:start;align-self:flex-start}
+.receipt-line{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:22px;padding:17px;border:1px solid var(--line);border-radius:8px;background:#fbfcf8;align-items:center}
+.receipt-line h3{font-size:14px}
+.receipt-progress{display:flex;gap:18px;flex-wrap:wrap;margin:13px 0 0}
+.receipt-progress dt{color:#626f59;font-size:10px}
+.receipt-progress dd{color:var(--forest);font-size:13px;font-weight:600;margin:3px 0 0;font-variant-numeric:tabular-nums}
+.supplier-table{min-width:1050px}
+.supplier-table th:first-child{min-width:160px}
+.supplier-table th:nth-child(2){min-width:150px}
+.supplier-table th:nth-child(3){min-width:185px}
+.supplier-table th:nth-child(4){min-width:170px}
+.supplier-table th:nth-child(5){min-width:135px}
+.supplier-table th:nth-child(6){min-width:95px}
+.supplier-table th:last-child{min-width:90px}
+.supplier-table .text-button{font-size:12px;text-align:left;white-space:normal}
+.supplier-products-content{padding:0 26px 24px}
+.supplier-products-content>p{font-size:12px;margin-bottom:18px;color:#626f59}
+.supplier-products-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.supplier-products-list>li{border:1px solid var(--line);border-radius:8px;padding:16px;background:#fbfcf8}
+.supplier-products-list strong{font-size:14px;color:var(--forest)}
+.supplier-product-meta{margin:10px 0 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.supplier-product-meta dt{font-size:10px;color:#626f59}
+.supplier-product-meta dd{font-size:12px;overflow-wrap:anywhere;margin:3px 0 0}
+.supplier-table td.address-cell{white-space:pre-line}
+.supplier-version-review{border:1px solid #e7dabd;border-radius:8px;background:#fcf8ee;padding:16px;margin-top:18px}
+.supplier-version-review h3{font-size:14px;color:#805f2b;margin-bottom:8px}
+.supplier-version-review .supplier-product-meta{margin-top:16px}
+.supplier-version-review>.button{margin-top:18px;white-space:normal;text-align:left}
+.supplier-version-review>.notice{margin-top:14px}
+@media(max-width:800px){
+ .inventory-heading{align-items:flex-start;flex-wrap:wrap}
+ .inventory-heading .button-group{justify-content:flex-start}
+ .inventory-heading .button-group .button{align-self:auto}
+ .inventory-form .form-row{gap:14px}
+ .purchase-heading,.purchase-footer{padding:18px 16px}
+ .purchase-totals{gap:24px}
+}
+@media(max-width:540px){
+ .inventory-heading{gap:18px}
+ .inventory-heading .muted{max-width:none}
+ .inventory-heading .button-group{width:100%;gap:8px}
+ .inventory-heading .button-group .button{flex:1;font-size:11px;min-height:44px;padding-inline:10px}
+ .inventory-messages{margin-bottom:20px}
+ .inventory-workspace .ledger-empty,.suppliers-workspace .ledger-empty{margin-inline:auto;max-width:100%;min-height:235px}
+ .inventory-workspace .table-scroll,.suppliers-workspace .table-scroll{max-width:100%}
+ .inventory-workspace .table-scroll:focus-visible,.suppliers-workspace .table-scroll:focus-visible{outline-offset:-3px}
+ .inventory-table th,.inventory-table th:first-child,.inventory-table th:last-child,.inventory-table th:nth-child(n){font-size:11px}
+ .inventory-table-note{font-size:10px;padding:14px}
+ .inventory-section-heading h2{font-size:17px}
+ .inventory-section-heading p{font-size:11px}
+ .purchase-heading{gap:12px}
+ .purchase-heading h3{font-size:16px}
+ .purchase-heading .eyebrow{font-size:9px}
+ .purchase-status{font-size:10px;max-width:110px;white-space:normal;text-align:center}
+ .purchase-footer .button-group{width:100%;flex-wrap:wrap}
+ .purchase-footer .button-group .button{flex:1;min-height:44px;font-size:11px}
+ .inventory-form{padding:0 18px}
+ .inventory-form .form-row{grid-template-columns:1fr}
+ .inventory-form input,.inventory-form select,.inventory-form textarea{min-height:44px;font-size:14px}
+ .inventory-form .dialog-footer{position:sticky;bottom:0;background:#fff;z-index:1}
+ .inventory-form .dialog-footer .button{font-size:12px;min-height:44px}
+ .inventory-form .dialog-footer .text-button{font-size:12px;min-height:44px}
+ .order-draft-line{padding:12px}
+ .order-numeric-fields{grid-template-columns:1fr;gap:14px}
+ .receipt-line{grid-template-columns:1fr;gap:17px;padding:14px}
+ .receipt-progress{justify-content:space-between;gap:10px}
+ .supplier-products-content{padding:0 18px 20px}
+ .supplier-product-meta{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .supplier-table .text-button{min-height:44px}
+}
