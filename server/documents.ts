@@ -12,6 +12,17 @@ const nullable=z.string().max(2000).nullable();
 const kindSchema=z.enum(['bill','payment_receipt','order']);
 export const draftSchema=z.object({paymentDate:nullable,orderedDate:nullable,description:nullable,amount:nullable,method:z.enum(['Cash','UPI','Card']).nullable(),additionalInformation:z.string().max(2000),transactionRef:nullable,supplierId:nullable,supplierName:nullable,lines:z.array(z.object({description:nullable,productId:nullable,productType:nullable,brand:nullable,flavour:nullable,packSize:nullable,unit:nullable,quantity:nullable,unitPrice:nullable,taxRate:nullable,evidence:nullable})).max(100)});
 const blankDraft=():DocumentDraft=>({paymentDate:null,orderedDate:null,description:null,amount:null,method:null,additionalInformation:'',transactionRef:null,supplierId:null,supplierName:null,lines:[]});
+const draftKeys=Object.keys(blankDraft()) as (keyof DocumentDraft)[];
+function manualFields(row:Row):Set<keyof DocumentDraft> {
+ if(row.manual_fields_json!==null)return new Set(JSON.parse(row.manual_fields_json));
+ const current=JSON.parse(row.draft_json) as DocumentDraft,previous=row.extracted_json?JSON.parse(row.extracted_json):{};
+ // Older drafts have no field origins. Preserve differences from the last scan;
+ // the review UI offers an explicit replace-all scan for ambiguous legacy data.
+ return new Set(draftKeys.filter(key=>{
+  const value=key==='lines'?current.lines.map(({productId,...line})=>line):current[key];
+  return JSON.stringify(value)!==JSON.stringify(previous[key]??blankDraft()[key]);
+ }));
+}
 interface Context { store:Store;inventory:InventoryService;actor:(r:any)=>Row;space:(r:any)=>string;settings:(u:Row)=>Settings;now:()=>number;saveExpense:(u:Row,s:string,input:unknown,id?:string)=>Expense }
 export function registerDocuments(app:FastifyInstance,ctx:Context) {
  const {store,inventory,now}=ctx;
@@ -37,6 +48,7 @@ export function registerDocuments(app:FastifyInstance,ctx:Context) {
    draft.lines.forEach((line,index)=>{
     if(!line.productId)result.push(`Line ${index+1}: uncertain product match. Select and verify brand, flavour, pack size and unit.`);
     if(!preciseNumber.safeParse(line.quantity).success)result.push(`Line ${index+1}: missing or invalid quantity; no pack conversion is inferred.`);
+    if(line.quantity&&/^0\d{5,7}$/.test(line.quantity.trim()))result.push(`Line ${index+1}: quantity resembles an HSN/SAC code. Verify the quantity column, not the tax classification code.`);
     if(!preciseNumber.safeParse(line.unitPrice).success)result.push(`Line ${index+1}: missing or invalid unit price.`);
     if(line.productId){const p=store.one('SELECT * FROM products WHERE id=? AND user_id=? AND space=?',line.productId,row.user_id,row.space);if(!p)result.push(`Line ${index+1}: product is not available in this workspace.`);else for(const [field,column] of [['brand','brand'],['flavour','flavour'],['packSize','pack_size'],['unit','unit']] as const){const value=line[field];if(value&&value.trim().toLowerCase()!==String(p[column]).trim().toLowerCase())result.push(`Line ${index+1}: document ${field} differs from selected product; verify this variant.`);}}
    });
@@ -59,7 +71,7 @@ export function registerDocuments(app:FastifyInstance,ctx:Context) {
   const hash=createHash('sha256').update(bytes).digest('hex');const existing=store.one('SELECT * FROM documents WHERE user_id=? AND space=? AND sha256=?',user.id,space,hash);
   if(existing){activity(user);return {...view(existing),duplicate:true};}
   const id=randomUUID(),at=now();
-  store.run('INSERT INTO documents (id,user_id,space,kind,name,mime_type,content,sha256,processing,draft_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',id,user.id,space,data.kind,data.name,data.mimeType,bytes,hash,aiStatus().configured?'manual':'setup_required',JSON.stringify(blankDraft()),at,at);
+  store.run('INSERT INTO documents (id,user_id,space,kind,name,mime_type,content,sha256,processing,draft_json,created_at,updated_at,manual_fields_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',id,user.id,space,data.kind,data.name,data.mimeType,bytes,hash,aiStatus().configured?'manual':'setup_required',JSON.stringify(blankDraft()),at,at,'[]');
   activity(user);reply.code(201);return view(owned(user,space,id));
  });
  app.get('/api/documents/:id',async request=>view(owned(ctx.actor(request),ctx.space(request),(request.params as any).id)));
@@ -71,12 +83,17 @@ export function registerDocuments(app:FastifyInstance,ctx:Context) {
   if(row.version!==data.version)throw new HttpError(409,'This draft changed in another tab. Reload it before saving.','STALE_VERSION');
   if(data.draft.supplierId&&!store.one('SELECT id FROM suppliers WHERE id=? AND user_id=? AND space=?',data.draft.supplierId,user.id,space))throw new HttpError(400,'Select a supplier in this workspace');
   for(const line of data.draft.lines)if(line.productId&&!store.one('SELECT id FROM products WHERE id=? AND user_id=? AND space=?',line.productId,user.id,space))throw new HttpError(400,'Select a product in this workspace');
-  store.run('UPDATE documents SET draft_json=?,kind=?,version=version+1,updated_at=? WHERE id=?',JSON.stringify(data.draft),data.kind??row.kind,now(),row.id);return view(owned(user,space,row.id));
+  const old=JSON.parse(row.draft_json) as DocumentDraft,manual=manualFields(row);
+  for(const key of draftKeys)if(JSON.stringify(data.draft[key])!==JSON.stringify(old[key]))manual.add(key);
+  if(data.kind&&data.kind!==row.kind&&row.processing==='scanning')throw new HttpError(409,'Wait for the current scan before changing document type.');
+  store.run('UPDATE documents SET draft_json=?,kind=?,manual_fields_json=?,version=version+1,updated_at=? WHERE id=?',JSON.stringify(data.draft),data.kind??row.kind,JSON.stringify([...manual]),now(),row.id);
+  if(data.kind&&data.kind!==row.kind)store.run('UPDATE documents SET extracted_json=NULL,processing=?,last_error=NULL WHERE id=?','manual',row.id);
+  return view(owned(user,space,row.id));
  });
  const scans=new Map<string,number[]>();
  app.post('/api/documents/:id/scan',async request=>{
   const user=ctx.actor(request),space=ctx.space(request),row=owned(user,space,(request.params as any).id);
-  const {version,provider}=z.object({version:z.number().int(),provider:z.string().optional()}).parse(request.body);
+  const {version,provider,replaceExisting}=z.object({version:z.number().int(),provider:z.string().optional(),replaceExisting:z.boolean().default(false)}).parse(request.body);
   if(!aiStatus().configured&&provider!=='free')throw new HttpError(503,'AI scanning requires setup. Enter or review the information manually; no extraction has been simulated.','AI_SETUP_REQUIRED');
   if(row.status==='confirmed'||row.processing==='scanning')throw new HttpError(409,'This document is already confirmed or scanning');
   if(row.version!==version)throw new HttpError(409,'Reload the latest draft before scanning');
@@ -86,13 +103,28 @@ export function registerDocuments(app:FastifyInstance,ctx:Context) {
    const extracted=await extractImage(Buffer.from(row.content),row.kind,row.mime_type,store,user.id,space,provider),latest=owned(user,space,row.id);
    if(latest.status==='confirmed')throw new HttpError(409,'This document was confirmed while scanning. The saved record is unchanged.');
    const current=JSON.parse(latest.draft_json) as DocumentDraft;
-   for(const key of ['paymentDate','orderedDate','description','amount','method','transactionRef','supplierName'] as const)if(!current[key]&&extracted[key]) (current as any)[key]=extracted[key];
-   if(!current.additionalInformation)current.additionalInformation=extracted.additionalInformation;
-   if(!current.lines.length)current.lines=extracted.lines.map(line=>({...line,productId:null}));
-   if(!current.supplierId&&current.supplierName){const match=store.one('SELECT id,name FROM suppliers WHERE user_id=? AND space=? AND lower(name)=lower(?)',user.id,space,current.supplierName.trim());if(match){current.supplierId=match.id;current.supplierName=match.name;}}
-   if(current.lines.length){for(const line of current.lines){if(!line.productId&&(line.description||line.brand)){const match=store.one('SELECT id FROM products WHERE user_id=? AND space=? AND (lower(name)=lower(?) OR (lower(brand)=lower(?) AND lower(product_type)=lower(?)))',user.id,space,line.description?.trim()??'',line.brand?.trim()??'',line.productType?.trim()??'');if(match)line.productId=match.id;}}}
-   store.run('UPDATE documents SET draft_json=?,extracted_json=?,processing=?,last_error=NULL,version=version+1,updated_at=? WHERE id=?',JSON.stringify(current),JSON.stringify(extracted),'extracted',now(),row.id);
-   return view(owned(user,space,row.id));
+   if(replaceExisting&&latest.version!==version)throw new HttpError(409,'This draft changed while scanning. Reload before replacing saved corrections.','STALE_VERSION');
+   const manual=replaceExisting?new Set<keyof DocumentDraft>():manualFields(latest),updatedFields:string[]=[];
+   for(const key of ['paymentDate','orderedDate','description','amount','method','transactionRef','supplierName','additionalInformation'] as const)if(!manual.has(key)){
+    if(current[key]!==extracted[key])updatedFields.push(key);
+    (current as any)[key]=extracted[key];
+   }
+   if(!manual.has('lines')){const lines=extracted.lines.map(line=>({...line,productId:null}));if(JSON.stringify(current.lines)!==JSON.stringify(lines))updatedFields.push('lines');current.lines=lines;}
+   if(!manual.has('supplierId')){
+    current.supplierId=null;
+    if(current.supplierName){const match=store.one('SELECT id,name FROM suppliers WHERE user_id=? AND space=? AND lower(name)=lower(?)',user.id,space,current.supplierName.trim());if(match){current.supplierId=match.id;current.supplierName=match.name;}}
+   }
+   if(!manual.has('lines'))for(const line of current.lines){
+    if(!line.description?.trim()&&!(line.brand?.trim()&&line.productType?.trim()))continue;
+    const norm=(value:string)=>value.trim().toLowerCase().replace(/\s+/g,' ');
+    const matches=store.all('SELECT * FROM products WHERE user_id=? AND space=?',user.id,space).filter(p=>{
+     const identified=(line.description&&norm(line.description)===norm(p.name))||(line.brand&&line.productType&&norm(line.brand)===norm(p.brand)&&norm(line.productType)===norm(p.product_type));
+     return identified&&([['brand','brand'],['productType','product_type'],['flavour','flavour'],['packSize','pack_size'],['unit','unit']] as const).every(([key,column])=>!line[key]?.trim()||norm(line[key]!)===norm(p[column]));
+    });
+    if(matches.length===1)line.productId=matches[0].id;
+   }
+   store.run('UPDATE documents SET draft_json=?,extracted_json=?,manual_fields_json=?,processing=?,last_error=NULL,version=version+1,updated_at=? WHERE id=?',JSON.stringify(current),JSON.stringify(extracted),JSON.stringify([...manual]),'extracted',now(),row.id);
+   return {...view(owned(user,space,row.id)),scanSummary:{updatedFields,preservedFields:[...manual]}};
   }catch(error){const latest=owned(user,space,row.id);if(latest.status==='draft')store.run('UPDATE documents SET processing=?,last_error=?,updated_at=? WHERE id=?','failed','Scanning failed. Your draft is preserved. Retry or use manual review.',now(),row.id);if(error instanceof HttpError)throw error;throw new HttpError(502,'The AI provider is unavailable or timed out. Your draft is preserved; continue manually.');}
  });
  app.post('/api/documents/:id/confirm',async request=>{

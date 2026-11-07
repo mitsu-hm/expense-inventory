@@ -27,7 +27,7 @@ test('final QA: all six screens on desktop/mobile, no root overflow, accessibili
    for(const view of ['Expenses','Inventory','Suppliers','Reports','Documents','Reminders']){
     await navigate(view);
     if(view==='Inventory')await expect(page.getByText('Wildleaf Lime Fizz',{exact:true}).first()).toBeVisible();
-    if(view==='Suppliers')await expect(page.getByText('Maple Beverage Supply',{exact:true}).first()).toBeVisible();
+    if(view==='Suppliers')await expect(page.locator('.suppliers-workspace').getByText('Maple Beverage Supply',{exact:true}).first()).toBeVisible();
     if(view==='Reports')await expect(page.getByTestId('report-total')).toBeVisible();
     if(view==='Documents'){await page.getByRole('button',{name:/demo-review.png/}).click();await expect(page.getByAltText('Source document')).toBeVisible();}
     await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});

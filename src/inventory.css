@@ -94,7 +94,7 @@
  .inventory-heading{gap:18px}
  .inventory-heading .muted{max-width:none}
  .inventory-heading .button-group{width:100%;gap:8px}
- .inventory-heading .button-group .button{flex:1;font-size:11px;min-height:44px;padding-inline:10px}
+ .inventory-heading .button-group .button{flex:1;font-size:14px;min-height:44px;padding-inline:10px}
  .inventory-messages{margin-bottom:20px}
  .inventory-workspace .ledger-empty,.suppliers-workspace .ledger-empty{margin-inline:auto;max-width:100%;min-height:235px}
  .inventory-workspace .table-scroll,.suppliers-workspace .table-scroll{max-width:100%}
@@ -108,7 +108,7 @@
  .purchase-heading .eyebrow{font-size:9px}
  .purchase-status{font-size:10px;max-width:110px;white-space:normal;text-align:center}
  .purchase-footer .button-group{width:100%;flex-wrap:wrap}
- .purchase-footer .button-group .button{flex:1;min-height:44px;font-size:11px}
+ .purchase-footer .button-group .button{flex:1;min-height:44px;font-size:14px}
  .inventory-form{padding:0 18px}
  .inventory-form .form-row{grid-template-columns:1fr}
  .inventory-form input,.inventory-form select,.inventory-form textarea{min-height:44px;font-size:14px}

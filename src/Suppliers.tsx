@@ -41,6 +41,11 @@ function SuppliersWorkspace({ space }: { space: Space }) {
   }, [space]);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   useEffect(() => {
+    const refresh = () => { void load(); setProductsReload(previous => previous + 1); };
+    window.addEventListener('ledger-refresh', refresh);
+    return () => window.removeEventListener('ledger-refresh', refresh);
+  }, [load]);
+  useEffect(() => {
     if (!productSupplier) return;
     const controller = new AbortController();
     setProducts(null); setProductsLoading(true); setProductsError('');
@@ -77,6 +82,7 @@ function SuppliersWorkspace({ space }: { space: Space }) {
       setDrafts(previous => { const next = { ...previous }; delete next[activeKey]; return next; });
       setEditOpen(false); setNotice(editing ? 'Supplier updated. Existing purchase prices and receipts are unchanged.' : 'Supplier added. You can now assign products to this supplier.');
       await load();
+      window.dispatchEvent(new Event('ledger-activity'));
     } catch (error) {
       setSaveError(errorMessage(error));
       if (editing && error instanceof ApiError && error.status === 409) { setConflict(true); await reviewLatest(); }

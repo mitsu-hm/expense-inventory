@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
+import { Decimal } from 'decimal.js';
 import { HttpError } from './domain.js';
 import type { Store } from './store.js';
 
@@ -45,47 +46,41 @@ function fewShotSuffix(store:Store,userId:string,space:string,kind:string):strin
 /* ── Free Invoice Text & Heuristic Analyzer ── */
 export function parseInvoiceText(rawText:string,kind:string){
  const lines=rawText.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
- let amount:string|null=null,paymentDate:string|null=null,method:'Cash'|'UPI'|'Card'|null=null,transactionRef:string|null=null,supplierName:string|null=null,description:string|null=null;
+ let amount:string|null=null,paymentDate:string|null=null,orderedDate:string|null=null,method:'Cash'|'UPI'|'Card'|null=null,transactionRef:string|null=null,supplierName:string|null=null,description:string|null=null,priority=0;
  const items:any[]=[];
-
  for(const line of lines){
   const iso=line.match(/\b(20\d{2})[-/](0[1-9]|1[0-2])[-/](0[1-9]|[12]\d|3[01])\b/);
-  if(iso&&!paymentDate)paymentDate=`${iso[1]}-${iso[2]}-${iso[3]}`;
   const dmy=line.match(/\b(0[1-9]|[12]\d|3[01])[-/.](0[1-9]|1[0-2])[-/.](20\d{2})\b/);
-  if(dmy&&!paymentDate)paymentDate=`${dmy[3]}-${dmy[2]}-${dmy[1]}`;
-  const total=line.match(/(?:total|amount|grand\s*total|net\s*amount|balance\s*due|paid)[\s:=-]+(?:rs\.?|inr|\$|₹)?\s*(\d+(?:\.\d{1,2})?)/i);
-  if(total&&!amount)amount=total[1].includes('.')?total[1]:`${total[1]}.00`;
-  const ref=line.match(/(?:ref(?:erence)?|utr|txn|transaction|invoice|bill)\s*(?:no\.?|id|#)?\s*[:=-]?\s*([A-Za-z0-9-_]{6,35})/i);
+  const date=iso?`${iso[1]}-${iso[2]}-${iso[3]}`:dmy?`${dmy[3]}-${dmy[2]}-${dmy[1]}`:null;
+  if(date&&!/\b(due|delivery|expiry)\b/i.test(line)){
+   if(kind==='payment_receipt'||/\b(payment|paid|transaction)\s*(date|on)\b/i.test(line)){if(!paymentDate)paymentDate=date;}
+   else if(!orderedDate)orderedDate=date;
+  }
+  const total=line.match(/^(grand\s*total|net\s*(?:amount|payable)|invoice\s*(?:total|value)|amount\s*paid|total\s*amount|total|amount|balance\s*due|paid)\s*[:=\-]?\s*(?:rs\.?|inr|\$|₹)?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\s*(?:inr|rs\.?)?\s*$/i);
+  if(total){const rank=/^(grand|net|invoice|amount\s*paid|total\s*amount)/i.test(total[1])?3:/^balance/i.test(total[1])?1:2;if(rank>priority){amount=new Decimal(total[2].replace(/,/g,'')).toFixed(2);priority=rank;}}
+  const ref=line.match(/\b(?:reference|ref|utr|txn|transaction|invoice|bill)\b\s*(?:(?:no\.?|id|#)\s*[:=\-]?|[:=])\s*([A-Za-z0-9][A-Za-z0-9_\/-]{2,99})\b/i);
   if(ref&&!transactionRef)transactionRef=ref[1];
- }
-
- if(!amount){
-  const allNums=rawText.match(/\b\d+\.\d{2}\b/g);
-  if(allNums&&allNums.length){
-   const sorted=allNums.map(n=>parseFloat(n)).filter(n=>!isNaN(n)&&n>0).sort((a,b)=>b-a);
-   if(sorted.length)amount=sorted[0].toFixed(2);
+  if(!/\b(accept(?:ed|s)?|available|supported|terms)\b/i.test(line)&&(kind==='payment_receipt'||/\b(payment\s*(?:mode|method)|paid\s*(?:by|via|using))\b/i.test(line))){
+   const match=line.match(/\b(upi|gpay|googlepay|phonepe|paytm|bhim|card|visa|mastercard|cash)\b/i);
+   if(match){const value=match[1].toLowerCase();method=value==='cash'?'Cash':['card','visa','mastercard'].includes(value)?'Card':'UPI';}
   }
  }
-
- const textLower=rawText.toLowerCase();
- if(textLower.includes('upi')||textLower.includes('gpay')||textLower.includes('phonepe')||textLower.includes('paytm')||textLower.includes('bhim'))method='UPI';
- else if(textLower.includes('card')||textLower.includes('visa')||textLower.includes('mastercard')||textLower.includes('debit')||textLower.includes('credit'))method='Card';
- else if(textLower.includes('cash'))method='Cash';
-
- if(lines.length>0){
-  const candidate=lines.find(l=>l.length>3&&l.length<50&&!/^(tax|invoice|bill|receipt|date|cash|tel|gstin|total|subtotal)/i.test(l));
-  if(candidate){supplierName=candidate;description=`Invoice: ${candidate}`;}
+ if(lines.length){
+  const candidate=lines.find(l=>l.length>3&&l.length<100&&!/^(tax|invoice|bill|receipt|date|cash|tel|gstin|total|subtotal|payment|transaction|accepted|reference|utr|txn|paid|amount)/i.test(l));
+  if(candidate){supplierName=candidate;description=candidate;}
  }
-
- for(const line of lines){
-  const itemMatch=line.match(/^([A-Za-z0-9\s&'-]{3,35})\s+(\d+(?:\.\d+)?)\s+(?:x\s+)?(\d+(?:\.\d{2})?)/);
-  if(itemMatch&&items.length<20){
-   items.push({description:itemMatch[1].trim(),productType:null,brand:null,flavour:null,packSize:null,unit:'unit',quantity:itemMatch[2],unitPrice:itemMatch[3],taxRate:null,evidence:line});
+ const header=lines.findIndex(l=>/\b(?:qty|quantity)\b/i.test(l)&&/\b(?:price|rate)\b/i.test(l)),complex=lines.some(l=>/\b(hsn|sac|cgst|sgst|igst)\b/i.test(l));
+ if(kind!=='payment_receipt'&&header>=0&&!complex)for(const line of lines.slice(header+1)){
+  if(/^(subtotal|tax|total|grand|net|payment|paid|amount|accepted|reference|date|invoice)\b/i.test(line))break;
+  const match=line.match(/^(.+?)\s{2,}(\d+(?:\.\d+)?)\s+(\d+(?:\.\d{1,6})?)\s+(\d+(?:\.\d{1,2})?)\s*$/);
+  if(match&&items.length<100){
+   items.push({description:match[1].trim(),productType:null,brand:null,flavour:null,packSize:null,unit:null,quantity:match[2],unitPrice:match[3],taxRate:null,evidence:line});
   }
  }
-
  const warnings=['Analyzed via free invoice API. Please review all fields against the screenshot.'];
- return {paymentDate:paymentDate??null,orderedDate:null,description:description??(supplierName?`Invoice from ${supplierName}`:(kind==='order'?'Purchase order':'Bill invoice')),amount:amount??null,method,additionalInformation:'Scanned with free invoice analyzer.',transactionRef,supplierName,lines:items,warnings};
+ if(complex&&kind!=='payment_receipt')warnings.push('Complex item table: OCR cannot safely distinguish HSN, tax, quantity and price columns. Transcribe the item rows manually or use the configured vision model.');
+ if(kind==='order'){paymentDate=null;method=null;}
+ return {paymentDate,orderedDate,description,amount,method,additionalInformation:'Scanned with free invoice analyzer.',transactionRef,supplierName,lines:items,warnings};
 }
 
 async function callFreeAnalyzer(b64:string,mime:string,kind:string):Promise<string>{
@@ -96,13 +91,11 @@ async function callFreeAnalyzer(b64:string,mime:string,kind:string):Promise<stri
   fd.append('isTable','true');
   fd.append('scale','true');
   const res=await fetch('https://api.ocr.space/parse/image',{method:'POST',signal:AbortSignal.timeout(20000),body:fd});
-  if(res.ok){
-   const data=await res.json();
-   const text=data.ParsedResults?.[0]?.ParsedText??'';
-   if(text.trim().length>0) return JSON.stringify(parseInvoiceText(text,kind));
-  }
- }catch{}
- return JSON.stringify(parseInvoiceText('',kind));
+  if(!res.ok)throw new HttpError(502,`OCR service returned ${res.status}. Your upload is saved; retry scanning or review manually.`);
+  const data=await res.json(),text=data.ParsedResults?.[0]?.ParsedText;
+  if(data.IsErroredOnProcessing||typeof text!=='string'||!text.trim())throw new HttpError(502,'OCR could not read this image. Your upload is saved; use a clearer image or review manually.');
+  return JSON.stringify(parseInvoiceText(text,kind));
+ }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(502,'OCR service is unavailable or timed out. Your upload is saved; retry scanning or review manually.');}
 }
 
 /* ── Provider-specific API calls ── */
@@ -153,7 +146,9 @@ export async function extractImage(content:Buffer,kind:string,mimeType:string,st
  const config=forcedProvider==='free'?{provider:'free' as const,model:'free-ocr',url:'https://api.ocr.space',key:'helloworld'}:configuration();
  if(!config)throw new HttpError(503,'AI scanning requires setup. Uploads and manual review still work. Configure a vision-capable provider on the server.','AI_SETUP_REQUIRED');
  const system=SYSTEM_PROMPT+fewShotSuffix(store,userId,space,kind);
- const userText='Transcribe this '+kind+' screenshot for human verification. Keep unsupported fields null. Use a short payee or goods/service summary for description, not a footer or disclaimer. Copy references exactly; never correct or substitute characters. Accepted payment methods do not establish the method actually used. An unpaid bill has null paymentDate and null method. Item lines contain only purchased goods or services, never merchant headers, dates, totals, payment metadata or notes. If no purchased items are visible, use an empty lines array.'+(kind==='payment_receipt'?' For this payment receipt, lines must be empty; extract payment details only.':'');
+ const userText='Transcribe this '+kind+' screenshot for human verification. Keep unsupported fields null. Use a short payee or goods/service summary for description, not a footer or disclaimer. Copy references exactly; never correct or substitute characters. Accepted payment methods do not establish the method actually used. An unpaid bill has null paymentDate and null method. Item lines contain only purchased goods or services, never merchant headers, dates, totals, payment metadata or notes. HSN/SAC codes are never quantities; tax percentages are not unit prices. If no purchased items are visible, use an empty lines array.'+(kind==='payment_receipt'
+  ?' For this payment receipt, lines must be empty; extract payment details only. Amount is the actual amount paid, as a decimal string without currency symbols. Copy the paid date and actual payment method. A receipt does not need an invoice grand-total field.'
+  :' Use the visible invoice/order date as orderedDate, not paymentDate. Amount is the final grand total including printed taxes, not subtotal, total quantity or piece count. Read the item table by column headers. Copy each row quantity, printed unit price and combined tax rate separately; do not copy a row total into unitPrice. Keep product variant, pack size and unit separate from ordered quantity.');
  const b64=content.toString('base64');
  let raw:string;
  switch(config.provider){
@@ -162,7 +157,22 @@ export async function extractImage(content:Buffer,kind:string,mimeType:string,st
   case 'ollama':raw=await callOllama(config,system,userText,b64);break;
   case 'free':raw=await callFreeAnalyzer(b64,mimeType,kind);break;
  }
- try{return extractedSchema.parse(JSON.parse(raw));}catch{throw new HttpError(502,'The AI response did not match the required extraction format. No financial record was saved. Use manual review.');}
+ try{
+  const extracted=extractedSchema.parse(JSON.parse(raw));
+  if(kind!=='payment_receipt')for(const [index,line]of extracted.lines.entries()){
+   // Narrow recovery for Description HSN Qty Rate GST% Gross rows. Never infer
+   // from totals alone, overwrite a contradictory value, or invent pack units.
+   const row=line.evidence?.match(/^(.+?)\s+\d{4,8}\s+(\d+(?:\.\d{1,6})?)\s+(\d+(?:\.\d{1,6})?)\s+(\d+(?:\.\d{1,6})?)\s*%\s+(\d+(?:\.\d{1,2})?)\s*$/);
+   if(!row||row[1].trim().toLowerCase()!==line.description?.trim().toLowerCase())continue;
+   const quantity=new Decimal(row[2]),price=new Decimal(row[3]),tax=new Decimal(row[4]);
+   if(!quantity.gt(0)||!price.gt(0)||tax.gt(100)||!quantity.times(price).times(tax.div(100).plus(1)).toDecimalPlaces(2).eq(row[5]))continue;
+   const fields={quantity:row[2],unitPrice:row[3],taxRate:row[4]};
+   if((Object.keys(fields) as (keyof typeof fields)[]).some(key=>line[key]!==null&&(!/^\d+(?:\.\d+)?$/.test(line[key]!)||!new Decimal(line[key]!).eq(fields[key]))))continue;
+   const missing=(Object.keys(fields) as (keyof typeof fields)[]).filter(key=>line[key]===null);
+   if(missing.length){for(const key of missing)line[key]=fields[key];if(extracted.warnings.length<50)extracted.warnings.push(`Line ${index+1}: recovered ${missing.join(', ')} from AI-transcribed line evidence with matching printed arithmetic. Verify against the image; this is not independent OCR.`);}
+  }
+  return extracted;
+ }catch{throw new HttpError(502,'The AI response did not match the required extraction format. No financial record was saved. Use manual review.');}
 }
 
 /* ── Feedback storage (called on document confirm) ── */

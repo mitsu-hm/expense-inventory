@@ -59,6 +59,8 @@ test('receipt extraction excludes payment metadata from purchased item lines', a
     assert.match(prompt, /lines must be empty/i);
     assert.match(prompt, /only purchased goods or services/i);
     assert.match(prompt, /accepted payment methods do not establish/i);
+    assert.match(prompt, /HSN\/SAC codes are never quantities/i);
+    assert.match(prompt, /tax percentages are not unit prices/i);
   } finally {
     globalThis.fetch = originalFetch;
     store.close();

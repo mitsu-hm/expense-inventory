@@ -23,7 +23,8 @@ GRAND TOTAL: 250.00
  `;
 
  const parsed = parseInvoiceText(sampleInvoiceText, 'bill');
- assert.equal(parsed.paymentDate, '2026-11-02');
+ assert.equal(parsed.paymentDate, null, 'An invoice date alone is not a payment date');
+ assert.equal(parsed.orderedDate, '2026-11-02');
  assert.equal(parsed.amount, '250.00');
  assert.equal(parsed.method, 'UPI');
  assert.equal(parsed.transactionRef, 'INV-2026-8849');
@@ -31,9 +32,11 @@ GRAND TOTAL: 250.00
  assert.ok(parsed.lines.length >= 1);
 });
 
-test('Document scan with provider: free works without any AI provider configured', async () => {
+test('Document scan accepts a successful OCR protocol response without a configured vision provider', async () => {
  const originalProvider = process.env.AI_PROVIDER;
+ const originalFetch=globalThis.fetch;
  delete process.env.AI_PROVIDER;
+ globalThis.fetch=async()=>Response.json({IsErroredOnProcessing:false,ParsedResults:[{ParsedText:'SYNTHETIC SHOP\nDate: 2026-11-02\nGrand total: 250.00'}]});
 
  const { app, request } = await fixture();
  try {
@@ -56,10 +59,10 @@ test('Document scan with provider: free works without any AI provider configured
   assert.equal(scanRes.statusCode, 200, scanRes.body);
   const scanned = scanRes.json();
   assert.equal(scanned.processing, 'extracted');
-  assert.ok(scanned.draft);
+  assert.equal(scanned.draft.amount,'250.00');assert.equal(scanned.draft.paymentDate,null);
 
-  await app.close();
  } finally {
+  await app.close();globalThis.fetch=originalFetch;
   if (originalProvider !== undefined) process.env.AI_PROVIDER = originalProvider;
   else delete process.env.AI_PROVIDER;
  }
